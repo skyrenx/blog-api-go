@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  CLUSTER_ENDPOINT:
+    Type: String
+    Description: cluster endpoint for dev environment
+Globals:
+  Function:
+    Environment:
+      Variables:
+        CLUSTER_ENDPOINT: !Ref CLUSTER_ENDPOINT
+Resources:
+  GoBlogLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: main
+      Runtime: go1.x
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
