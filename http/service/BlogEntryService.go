@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/skyrenx/blog-api-go/http/entities"
+	"github.com/skyrenx/blog-api-go/http/entities/dto"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -20,13 +22,23 @@ const (
 	REGION = "us-east-1"
 )
 
-func GetBlogEntries(page int) ([]entities.BlogEntry, int, error) {
-	pageSize := 2
-
-	if page < 1 {
-		return nil, 0, fmt.Errorf("failed to get blog entries. requested page should be greater than 0")
+func GetBlogEntries(pageNumber int, pageSize int) ([]entities.BlogEntry, int, error) {
+	blogEntries, totalPages, err := getBlogEntriesOrSummaries[entities.BlogEntry](pageNumber, pageSize)
+	if err != nil {
+		return nil, 0, err
 	}
+	return blogEntries, totalPages, nil
+}
 
+func GetBlogEntrySummaries(pageNumber int, pageSize int) ([]dto.BlogEntrySummary, int, error) {
+	blogEntrySummaries, totalPages, err := getBlogEntriesOrSummaries[dto.BlogEntrySummary](pageNumber, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	return blogEntrySummaries, totalPages, nil
+}
+
+func GetBlogEntryById(id int) (*entities.BlogEntry, error) {
 	// Get the cluster endpoint from the environment
 	clusterEndpoint := os.Getenv("CLUSTER_ENDPOINT")
 	_, b := os.LookupEnv("CLUSTER_ENDPOINT")
@@ -37,67 +49,24 @@ func GetBlogEntries(page int) ([]entities.BlogEntry, int, error) {
 	// Establish connection
 	conn, err := getConnection(ctx, clusterEndpoint)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	defer conn.Close(ctx)
 
-	var totalRows int
-	query := `SELECT COUNT(*) FROM blog_entries`
-	err = conn.QueryRow(ctx, query).Scan(&totalRows)
+	query := `SELECT * FROM blog_entries WHERE id = $1 `
+	rows, err := conn.Query(ctx, query, id)
 	if err != nil {
-		return nil, 0, err
-	}
-	totalPages := (totalRows + pageSize - 1) / pageSize
-	if page > totalPages {
-		return nil, 0, fmt.Errorf(
-			"requested page does not exist. Page requested was %v, total pages is %v",
-			page, pageSize)
-	}
-
-	// Calculate the offset
-	offset := (page - 1) * pageSize
-
-	query = `SELECT * FROM blog_entries ORDER BY created_at DESC LIMIT $1 OFFSET $2`
-	rows, err := conn.Query(ctx, query, pageSize, offset)
-	if err != nil {
-		return nil, 0, err
+		return nil, fmt.Errorf("failed to get row by id: %v: %w", id, err)
 	}
 	defer rows.Close()
-
-	blogEntries, _ := pgx.CollectRows(rows, pgx.RowToStructByName[entities.BlogEntry])
-	fmt.Printf("blogEntries: %v\n", blogEntries)
-	return blogEntries, totalPages, nil
-}
-
-func GetBlogEntryById(id int) (*entities.BlogEntry, error){
-		// Get the cluster endpoint from the environment
-		clusterEndpoint := os.Getenv("CLUSTER_ENDPOINT")
-		_, b := os.LookupEnv("CLUSTER_ENDPOINT")
-		fmt.Printf("Cluster endpoint found? %v \nUsing cluster endpoint: %s\n", b, clusterEndpoint)
-	
-		ctx := context.Background()
-	
-		// Establish connection
-		conn, err := getConnection(ctx, clusterEndpoint)
-		if err != nil {
-			return nil, err
+	blogEntry, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[entities.BlogEntry])
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("no blog entry found with id %v", id)
 		}
-		defer conn.Close(ctx)
-
-		query := `SELECT * FROM blog_entries WHERE id = $1 `
-		rows, err := conn.Query(ctx, query, id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get row by id: %v: %w", id, err)
-		}
-		defer rows.Close()
-		blogEntry, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[entities.BlogEntry])
-		if err != nil {
-			if err == pgx.ErrNoRows {
-				return nil, fmt.Errorf("no blog entry found with id %v", id)
-			}
-			return nil, fmt.Errorf("failed to collect row: %w", err)
-		}
-		return &blogEntry, nil
+		return nil, fmt.Errorf("failed to collect row: %w", err)
+	}
+	return &blogEntry, nil
 
 }
 
@@ -202,6 +171,78 @@ func Example() error {
 	defer conn.Close(ctx)
 
 	return nil
+}
+
+func getBlogEntriesOrSummaries[T any](pageNumber int, pageSize int) ([]T, int, error) {
+
+	if pageNumber < 1 {
+		return nil, 0, fmt.Errorf(
+			"failed to get blog entries. requested page number should be greater than 0")
+	}
+	if pageSize < 1 {
+		return nil, 0, fmt.Errorf(
+			"failed to get blog entries. requested page size should be greater than 0")
+	}
+
+	// Get the cluster endpoint from the environment
+	clusterEndpoint := os.Getenv("CLUSTER_ENDPOINT")
+	_, b := os.LookupEnv("CLUSTER_ENDPOINT")
+	fmt.Printf("Cluster endpoint found? %v \nUsing cluster endpoint: %s\n", b, clusterEndpoint)
+
+	ctx := context.Background()
+
+	// Establish connection
+	conn, err := getConnection(ctx, clusterEndpoint)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer conn.Close(ctx)
+
+	var totalRows int
+	query := `SELECT COUNT(*) FROM blog_entries`
+	err = conn.QueryRow(ctx, query).Scan(&totalRows)
+	if err != nil {
+		return nil, 0, err
+	}
+	totalPages := (totalRows + pageSize - 1) / pageSize
+	if pageNumber > totalPages {
+		return nil, 0, fmt.Errorf(
+			"requested page does not exist. Page requested was %v, total pages is %v",
+			pageNumber, pageSize)
+	}
+
+	var instance T
+	// Use reflection to extract field names with "db" tags
+	columns := getDBFieldNames(instance)
+	query = fmt.Sprintf("SELECT %s FROM blog_entries ORDER BY created_at DESC LIMIT $1 OFFSET $2", strings.Join(columns, ", "))
+	offset := (pageNumber - 1) * pageSize
+	rows, err := conn.Query(ctx, query, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	blogEntriesOrSummaries, _ := pgx.CollectRows(rows, pgx.RowToStructByName[T])
+	fmt.Printf("blog entries or summaries: %v", blogEntriesOrSummaries)
+	return blogEntriesOrSummaries, totalPages, nil
+}
+
+// Helper function to extract "db" tags from a struct using reflection
+func getDBFieldNames(instance any) []string {
+	t := reflect.TypeOf(instance)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	var columns []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		dbTag := field.Tag.Get("db")
+		if dbTag != "" {
+			columns = append(columns, dbTag)
+		}
+	}
+	return columns
 }
 
 // generate password token to connect to your Aurora DSQL cluster.

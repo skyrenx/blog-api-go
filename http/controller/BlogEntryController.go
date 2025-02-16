@@ -23,12 +23,12 @@ func AuroraExampleHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "done"})
-	return
 }
 
 func GetBlogEntries(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	blogEntries, totalPages, err := service.GetBlogEntries(page)
+	pageNumber, _ := strconv.Atoi(c.DefaultQuery("pageNumber", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "1"))
+	blogEntries, totalPages, err := service.GetBlogEntries(pageNumber, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to process the request",
@@ -38,7 +38,21 @@ func GetBlogEntries(c *gin.Context) {
 
 	}
 	c.JSON(http.StatusOK, gin.H{"blog_entries": blogEntries, "page_count": totalPages})
-	return
+}
+
+func GetBlogEntrySummaries(c *gin.Context) {
+	pageNumber, _ := strconv.Atoi(c.DefaultQuery("pageNumber", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "1"))
+	blogEntries, totalPages, err := service.GetBlogEntrySummaries(pageNumber, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process the request",
+		})
+		fmt.Fprintf(os.Stderr, "Unable to run handler: %v\n", err) //TODO ?
+		return
+
+	}
+	c.JSON(http.StatusOK, gin.H{"blog_entry_summaries": blogEntries, "page_count": totalPages})
 }
 
 func GetBlogEntryById(c *gin.Context) {

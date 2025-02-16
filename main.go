@@ -21,6 +21,7 @@ func init() {
 	router.SetTrustedProxies(nil)
 	router.GET("/aurora", controller.AuroraExampleHandler)
 	router.GET("/BlogEntry", controller.GetBlogEntries)
+	router.GET("/BlogEntrySummary", controller.GetBlogEntrySummaries)
 	router.GET("/BlogEntry/:id", controller.GetBlogEntryById)
 	router.POST("/BlogEntry", controller.CreateBlogEntry)
 
