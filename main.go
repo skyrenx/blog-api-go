@@ -21,6 +21,7 @@ func init() {
 	router := gin.Default()
 	router.SetTrustedProxies(nil)
 	router.GET("/aurora", controller.AuroraExampleHandler)
+	router.POST("/BlogEntry", controller.CreateBlogEntry)
 
 	// Wrap the router with the Lambda adapter.
 	ginLambda = ginadapter.New(router)

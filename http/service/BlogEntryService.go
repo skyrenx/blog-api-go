@@ -20,11 +20,70 @@ const (
 	REGION = "us-east-1"
 )
 
+func CreateBlogEntry(entry entities.BlogEntry) error {
+	clusterEndpoint := os.Getenv("CLUSTER_ENDPOINT")
+	if clusterEndpoint == "" {
+		return fmt.Errorf("CLUSTER_ENDPOINT is not set")
+	}
+
+	ctx := context.Background()
+
+	// Establish connection
+	conn, err := getConnection(ctx, clusterEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to establish connection: %w", err)
+	}
+	defer conn.Close(ctx)
+
+	// Start a transaction
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) // Rollback on error
+
+	// Step 1: Retrieve the current NextId value
+	// Aurora Serverless v2 does not allow unqualified FOR UPDATE on tables without a strict equality predicate on the key.
+	var nextId int
+	err = tx.QueryRow(ctx, `
+    UPDATE blog_entry_sequence 
+    SET next_id = next_id + 1 
+    RETURNING next_id - 1
+`).Scan(&nextId)
+	if err != nil {
+		return fmt.Errorf("failed to get next_id: %w", err)
+	}
+
+	// Step 2: Insert the new BlogEntry using the retrieved NextId
+	query := `
+		INSERT INTO blog_entries (id, title, content, author, created_at, updated_at, published)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err = tx.Exec(ctx, query, nextId, entry.Title, entry.Content, entry.Author, time.Now(), time.Now(), entry.Published)
+	if err != nil {
+		return fmt.Errorf("failed to insert blog entry: %w", err)
+	}
+
+	// Step 3: Increment NextId in the blog_entry_sequence table
+	_, err = tx.Exec(ctx, `UPDATE blog_entry_sequence SET next_id = next_id + 1`)
+	if err != nil {
+		return fmt.Errorf("failed to update next_id: %w", err)
+	}
+
+	// Commit the transaction
+	err = tx.Commit(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	fmt.Printf("Blog entry created with ID: %d\n", nextId)
+	return nil
+}
+
 func Example() error {
 	// Get the cluster endpoint from the environment
 	clusterEndpoint := os.Getenv("CLUSTER_ENDPOINT")
 	_, b := os.LookupEnv("CLUSTER_ENDPOINT")
-
 	fmt.Printf("Cluster endpoint found? %v \nUsing cluster endpoint: %s\n", b, clusterEndpoint)
 
 	ctx := context.Background()
