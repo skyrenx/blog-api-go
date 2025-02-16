@@ -10,7 +10,6 @@ import (
 	_ "github.com/aws/aws-sdk-go-v2/aws"
 	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq" // Import PostgreSQL driver as a blank import
 )
 
 var ginLambda *ginadapter.GinLambda
@@ -21,6 +20,8 @@ func init() {
 	router := gin.Default()
 	router.SetTrustedProxies(nil)
 	router.GET("/aurora", controller.AuroraExampleHandler)
+	router.GET("/BlogEntry", controller.GetBlogEntries)
+	router.GET("/BlogEntry/:id", controller.GetBlogEntryById)
 	router.POST("/BlogEntry", controller.CreateBlogEntry)
 
 	// Wrap the router with the Lambda adapter.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/skyrenx/blog-api-go/http/entities"
 	"github.com/skyrenx/blog-api-go/http/service"
@@ -15,10 +16,49 @@ func AuroraExampleHandler(c *gin.Context) {
 	err := service.Example()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to run example: %v\n", err) //TODO ?
-		os.Exit(1)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process the request",
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "done"})
+	return
+}
+
+func GetBlogEntries(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	blogEntries, totalPages, err := service.GetBlogEntries(page)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process the request",
+		})
+		fmt.Fprintf(os.Stderr, "Unable to run handler: %v\n", err) //TODO ?
+		return
+
+	}
+	c.JSON(http.StatusOK, gin.H{"blog_entries": blogEntries, "page_count": totalPages})
+	return
+}
+
+func GetBlogEntryById(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+	blogEntry, err := service.GetBlogEntryById(id)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to run handler: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process the request",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"blog_entry": blogEntry,
+	})
 }
 
 func CreateBlogEntry(c *gin.Context) {
@@ -33,7 +73,10 @@ func CreateBlogEntry(c *gin.Context) {
 
 	err := service.CreateBlogEntry(entry)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to run handler: %v\n", err) //TODO ?
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Unable to run handler: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process the request",
+		})
+		return
 	}
 }
