@@ -12,19 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func AuroraExampleHandler(c *gin.Context) {
-	err := service.Example()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to run example: %v\n", err) //TODO ?
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to process the request",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "done"})
-}
-
 func GetBlogEntries(c *gin.Context) {
 	pageNumber, _ := strconv.Atoi(c.DefaultQuery("pageNumber", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "1"))

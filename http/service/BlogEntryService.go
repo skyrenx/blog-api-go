@@ -124,55 +124,6 @@ func CreateBlogEntry(entry entities.BlogEntry) error {
 	return nil
 }
 
-func Example() error {
-	// Get the cluster endpoint from the environment
-	clusterEndpoint := os.Getenv("CLUSTER_ENDPOINT")
-	_, b := os.LookupEnv("CLUSTER_ENDPOINT")
-	fmt.Printf("Cluster endpoint found? %v \nUsing cluster endpoint: %s\n", b, clusterEndpoint)
-
-	ctx := context.Background()
-
-	// Establish connection
-	conn, err := getConnection(ctx, clusterEndpoint)
-	if err != nil {
-		return err
-	}
-
-	query := `SELECT 1`
-	_, err = conn.Exec(ctx, query)
-	if err != nil {
-		return err
-	}
-
-	var totalRows int
-	query = `SELECT COUNT(*) FROM blog_entries`
-	err = conn.QueryRow(ctx, query).Scan(&totalRows)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to count rows: %v", err))
-	}
-
-	fmt.Printf("Total number of rows in blog_entries: %d\n", totalRows)
-
-	//blogEntries := []entities.BlogEntry{}
-	// Define the SQL query to insert a new owner record.
-	query = `SELECT * FROM blog_entries LIMIT 10`
-	rows, err := conn.Query(ctx, query)
-	if err != nil {
-		panic(fmt.Sprintf("error retrieving data, %v", err.Error()))
-	}
-	defer rows.Close()
-
-	blogEntries, _ := pgx.CollectRows(rows, pgx.RowToStructByName[entities.BlogEntry])
-	fmt.Printf("blogEntries: %v\n", blogEntries)
-	// if err != nil || owners[0].Name != "John Doe" || owners[0].City != "Anytown" {
-	// 	panic("Error retrieving data")
-	// }
-
-	defer conn.Close(ctx)
-
-	return nil
-}
-
 func getBlogEntriesOrSummaries[T any](pageNumber int, pageSize int) ([]T, int, error) {
 
 	if pageNumber < 1 {
