@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 
+	"github.com/skyrenx/blog-api-go/http/entities"
 	"github.com/skyrenx/blog-api-go/http/entities/dto"
 	"github.com/skyrenx/blog-api-go/http/repository"
 )
@@ -14,5 +15,13 @@ func GetUserByUsername(username string) (*dto.UserWithoutPassword, error) {
 		return nil, fmt.Errorf("could not get the username of the user: %v", username)
 	}
 	return r, nil
-	
+}
+
+func Register(user entities.User) error {
+	err := repository.RegisterUser(user)
+	if err != nil {
+		fmt.Printf("Error in Register: %v\n", err.Error())
+		return fmt.Errorf("could not register the user: %v", user.Username)
+	}
+	return nil
 }

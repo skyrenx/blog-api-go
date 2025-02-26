@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,7 +13,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/jackc/pgx/v5"
+	"github.com/skyrenx/blog-api-go/http/entities"
 	"github.com/skyrenx/blog-api-go/http/entities/dto"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -42,7 +45,38 @@ func GetUserByUsername(username string) (*dto.UserWithoutPassword, error) {
 		return nil, fmt.Errorf("failed to collect row: %w", err)
 	}
 	return &user, nil
+}
 
+func RegisterUser(user entities.User) error {
+	ctx := context.Background()
+	conn, err := getConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close(ctx)
+	hashedPassword, err := hashPassword(user.Password)
+	if err != nil {
+		return err
+	}
+	// Insert user into the database
+	query := `INSERT INTO users (username, password, enabled) VALUES ($1, $2, $3)`
+	_, err = conn.Exec(ctx, query, user.Username, hashedPassword, true)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// hashPassword hashes a password using bcrypt
+func hashPassword(password string) (string, error) {
+	if password == "" {
+		return "", errors.New("password cannot be empty")
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashed), nil
 }
 
 // Connect to the Aurora DSQL cluster.

@@ -26,6 +26,7 @@ func init() {
 	router.GET("/BlogEntry/:id", controller.GetBlogEntryById)
 	router.POST("/BlogEntry", controller.CreateBlogEntry)
 	router.GET("/User/:username", controller.GetUserByUsername)
+	router.POST("/User/register", controller.Register)
 
 	// Wrap the router with the Lambda adapter.
 	ginLambda = ginadapter.New(router)
