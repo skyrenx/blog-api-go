@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/skyrenx/blog-api-go/http/entities"
 	"github.com/skyrenx/blog-api-go/http/entities/dto"
@@ -67,6 +68,40 @@ func RegisterUser(user entities.User) error {
 	return nil
 }
 
+func Login(userCredentials entities.User) (*string, error) {
+	ctx := context.Background()
+	conn, err := getConnection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close(ctx)
+
+	query := `SELECT username, password, enabled FROM users WHERE username = $1 `
+	rows, err := conn.Query(ctx, query, userCredentials.Username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get row by username: %v: %w", userCredentials.Username, err)
+	}
+	defer rows.Close()
+	foundUser, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[entities.User])
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("no blog entry found with username %v", userCredentials.Username)
+		}
+		return nil, fmt.Errorf("failed to collect row: %w", err)
+	}
+
+	// Compare the provided password with the stored hashed password
+	if err := bcrypt.CompareHashAndPassword([]byte(foundUser.Password), []byte(userCredentials.Password)); err != nil {
+		return nil, fmt.Errorf("invalid username or password: %v: %w", userCredentials.Username, err)
+	}
+	// Generate JWT token
+	token, err := generateJWT(userCredentials.Username)
+	if err != nil {
+		return nil, fmt.Errorf("could not generate token: %v: %w", userCredentials.Username, err)
+	}
+	return &token, nil
+}
+
 // hashPassword hashes a password using bcrypt
 func hashPassword(password string) (string, error) {
 	if password == "" {
@@ -77,6 +112,25 @@ func hashPassword(password string) (string, error) {
 		return "", err
 	}
 	return string(hashed), nil
+}
+
+func generateJWT(username string) (string, error) {
+	expirationTime := time.Now().Add(24 * time.Hour) // Token valid for 24 hours
+
+	claims := &entities.Claims{
+		Username: username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+
+	// Create token with claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	// Sign the token with the secret key
+	return token.SignedString([]byte(jwtSecret))
 }
 
 // Connect to the Aurora DSQL cluster.

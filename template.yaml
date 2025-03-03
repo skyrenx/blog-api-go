@@ -3,11 +3,15 @@ Parameters:
   CLUSTER_ENDPOINT:
     Type: String
     Description: cluster endpoint for dev environment
+  JWT_SECRET:
+    Type: String
+    Description: jwt secret for dev environment   
 Globals:
   Function:
     Environment:
       Variables:
         CLUSTER_ENDPOINT: !Ref CLUSTER_ENDPOINT
+        JWT_SECRET: !Ref JWT_SECRET
 Resources:
   GoBlogLambda:
     Type: AWS::Serverless::Function

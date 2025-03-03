@@ -25,3 +25,12 @@ func Register(user entities.User) error {
 	}
 	return nil
 }
+
+func Login(user entities.User) (*string, error) {
+	token, err := repository.Login(user)
+	if err != nil {
+		fmt.Printf("Error in Login: %v\n", err.Error())
+		return nil, fmt.Errorf("could not login the user: %v", user.Username)
+	}
+	return token, nil
+}

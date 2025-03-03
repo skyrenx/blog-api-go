@@ -38,3 +38,22 @@ func Register(c *gin.Context) {
 	}
 	c.Status(http.StatusCreated)
 }
+
+func Login(c *gin.Context) {
+	var user entities.User
+	if err := c.ShouldBindJSON(&user); err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to run handler: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process the request",
+		})
+		return
+	}
+	token, err := service.Login(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to process the request",
+		})
+		return
+	}
+	c.JSON(http.StatusAccepted, token)
+}
